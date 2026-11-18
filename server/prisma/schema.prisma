@@ -1,0 +1,517 @@
+// HireSense AI - database schema
+// PostgreSQL + Prisma ORM
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  // The connection URL lives in prisma.config.ts (Prisma 7)
+}
+
+// ---------- Enums ----------
+
+enum Role {
+  CANDIDATE
+  RECRUITER
+  ADMIN
+}
+
+enum JobStatus {
+  DRAFT
+  OPEN
+  CLOSED
+}
+
+enum Stage {
+  SCREENING
+  APTITUDE
+  GROUP_DISCUSSION
+  INTERVIEW
+  FINAL_REVIEW
+}
+
+enum ApplicationStatus {
+  IN_PROGRESS
+  SHORTLISTED
+  REJECTED
+  HIRED
+  WITHDRAWN
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum AttemptStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  SUBMITTED
+  AUTO_SUBMITTED
+}
+
+enum SessionStatus {
+  SCHEDULED
+  LIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum ViolationType {
+  TAB_SWITCH
+  FULLSCREEN_EXIT
+  COPY_PASTE
+  PHONE_DETECTED
+  NO_FACE
+  MULTIPLE_FACES
+  LOOKING_AWAY
+  CAMERA_OFF
+}
+
+enum Recommendation {
+  STRONG_HIRE
+  HIRE
+  MAYBE
+  REJECT
+}
+
+enum CheckResult {
+  VERIFIED
+  UNVERIFIED
+  FLAGGED
+}
+
+enum EventType {
+  APTITUDE_TEST
+  GROUP_DISCUSSION
+  INTERVIEW
+}
+
+// ---------- Users ----------
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  fullName     String
+  role         Role
+  isActive     Boolean  @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  candidateProfile CandidateProfile?
+  recruiterProfile RecruiterProfile?
+  notifications    Notification[]
+  emailLogs        EmailLog[]
+}
+
+model CandidateProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phone       String?
+  location    String?
+  headline    String?
+  linkedinUrl String?
+  githubUrl   String?
+  gender      String?
+  college     String?
+  degree      String?
+  graduationYear Int?
+  photoUrl    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  skills       CandidateSkill[]
+  resumes      Resume[]
+  applications Application[]
+}
+
+model Company {
+  id         String   @id @default(cuid())
+  name       String
+  website    String?
+  industry   String?
+  createdAt  DateTime @default(now())
+
+  recruiters RecruiterProfile[]
+  jobs       Job[]
+}
+
+model RecruiterProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id])
+  designation String?
+  createdAt   DateTime @default(now())
+
+  jobs        Job[]
+}
+
+// ---------- Skills & Jobs ----------
+
+model Skill {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  category  String?
+
+  jobSkills       JobSkill[]
+  candidateSkills CandidateSkill[]
+}
+
+model CandidateSkill {
+  candidateId String
+  candidate   CandidateProfile @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  skillId     String
+  skill       Skill            @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  source      String           @default("RESUME")
+
+  @@id([candidateId, skillId])
+}
+
+model Job {
+  id              String    @id @default(cuid())
+  title           String
+  description     String
+  location        String?
+  employmentType  String?
+  experienceLevel String?
+  openings        Int       @default(1)
+  status          JobStatus @default(DRAFT)
+  blindScreening  Boolean   @default(false)
+  aptitudeCutoff  Int       @default(60)
+  closesAt        DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  companyId   String
+  company     Company          @relation(fields: [companyId], references: [id])
+  recruiterId String
+  recruiter   RecruiterProfile @relation(fields: [recruiterId], references: [id])
+
+  skills       JobSkill[]
+  applications Application[]
+  gdSessions   GDSession[]
+  events       ScheduledEvent[]
+}
+
+model JobSkill {
+  jobId      String
+  job        Job     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  skillId    String
+  skill      Skill   @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  isRequired Boolean @default(true)
+
+  @@id([jobId, skillId])
+}
+
+model Application {
+  id          String            @id @default(cuid())
+  candidateId String
+  candidate   CandidateProfile  @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  jobId       String
+  job         Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  resumeId    String?
+  resume      Resume?           @relation(fields: [resumeId], references: [id])
+  stage       Stage             @default(SCREENING)
+  status      ApplicationStatus @default(IN_PROGRESS)
+  appliedAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  resumeAnalysis   ResumeAnalysis?
+  aptitudeAttempt  AptitudeAttempt?
+  gdParticipant    GDParticipant?
+  interviewSession InterviewSession?
+  finalReport      FinalReport?
+  feedback         CandidateFeedback?
+  integrityLogs    IntegrityLog[]
+  stageHistory     StageHistory[]
+  events           ScheduledEvent[]
+
+  @@unique([candidateId, jobId])
+}
+
+model StageHistory {
+  id            String      @id @default(cuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  fromStage     Stage?
+  toStage       Stage
+  status        ApplicationStatus
+  note          String?
+  changedById   String?
+  createdAt     DateTime    @default(now())
+}
+
+// ---------- Stage 1: Resume ----------
+
+model Resume {
+  id            String           @id @default(cuid())
+  candidateId   String
+  candidate     CandidateProfile @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  fileName      String
+  mimeType      String
+  sizeBytes     Int
+  extractedText String
+  parsedData    Json?
+  isPrimary     Boolean          @default(true)
+  createdAt     DateTime         @default(now())
+
+  applications       Application[]
+  authenticityChecks AuthenticityCheck[]
+}
+
+model ResumeAnalysis {
+  id               String      @id @default(cuid())
+  applicationId    String      @unique
+  application      Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  fitScore         Int
+  skillCoverage    Int
+  matchedSkills    String[]
+  missingSkills    String[]
+  strengths        String[]
+  gaps             String[]
+  summary          String
+  createdAt        DateTime    @default(now())
+}
+
+// New feature: resume authenticity check
+model AuthenticityCheck {
+  id        String      @id @default(cuid())
+  resumeId  String
+  resume    Resume      @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+  checkType String      // e.g. GITHUB_PROFILE, LINKEDIN_URL, SKILL_EVIDENCE
+  target    String
+  result    CheckResult
+  detail    String
+  createdAt DateTime    @default(now())
+}
+
+// ---------- Stage 2: Aptitude ----------
+
+model AptitudeQuestion {
+  id           String     @id @default(cuid())
+  category     String     // QUANTITATIVE, LOGICAL, VERBAL, TECHNICAL
+  difficulty   Difficulty
+  question     String
+  options      String[]
+  correctIndex Int
+  explanation  String?
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+
+  answers AptitudeAnswer[]
+}
+
+model AptitudeAttempt {
+  id               String        @id @default(cuid())
+  applicationId    String        @unique
+  application      Application   @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  status           AttemptStatus @default(NOT_STARTED)
+  durationMinutes  Int           @default(30)
+  questionCount    Int           @default(15)
+  startedAt        DateTime?
+  submittedAt      DateTime?
+  score            Int?
+  categoryScores   Json?
+  tabSwitchCount   Int           @default(0)
+
+  answers AptitudeAnswer[]
+}
+
+model AptitudeAnswer {
+  id            String           @id @default(cuid())
+  attemptId     String
+  attempt       AptitudeAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  questionId    String
+  question      AptitudeQuestion @relation(fields: [questionId], references: [id])
+  orderIndex    Int
+  selectedIndex Int?
+  isCorrect     Boolean?
+  servedAt      DateTime         @default(now())
+  answeredAt    DateTime?
+
+  @@unique([attemptId, questionId])
+}
+
+// ---------- Stage 3: Group discussion ----------
+
+model GDTopic {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  category    String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  sessions GDSession[]
+}
+
+model GDSession {
+  id              String        @id @default(cuid())
+  jobId           String
+  job             Job           @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  topicId         String
+  topic           GDTopic       @relation(fields: [topicId], references: [id])
+  status          SessionStatus @default(SCHEDULED)
+  scheduledAt     DateTime
+  durationMinutes Int           @default(15)
+  startedAt       DateTime?
+  endedAt         DateTime?
+
+  participants GDParticipant[]
+  transcript   GDTranscriptEntry[]
+}
+
+model GDParticipant {
+  id              String      @id @default(cuid())
+  sessionId       String
+  session         GDSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  applicationId   String      @unique
+  application     Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  speakingSeconds Int         @default(0)
+  turnCount       Int         @default(0)
+  impactScore     Int?
+  relevanceScore  Int?
+  leadershipScore Int?
+  summary         String?
+
+  entries GDTranscriptEntry[]
+}
+
+model GDTranscriptEntry {
+  id            String        @id @default(cuid())
+  sessionId     String
+  session       GDSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  participantId String
+  participant   GDParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  text          String
+  spokenAt      DateTime      @default(now())
+}
+
+// ---------- Stage 4: AI interview ----------
+
+model InterviewSession {
+  id            String        @id @default(cuid())
+  applicationId String        @unique
+  application   Application   @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  status        SessionStatus @default(SCHEDULED)
+  startedAt     DateTime?
+  endedAt       DateTime?
+  overallScore  Int?
+
+  questions InterviewQuestion[]
+}
+
+model InterviewQuestion {
+  id         String           @id @default(cuid())
+  sessionId  String
+  session    InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  orderIndex Int
+  question       String
+  focusArea      String?
+  expectedPoints String[]
+
+  answer InterviewAnswer?
+}
+
+model InterviewAnswer {
+  id                 String            @id @default(cuid())
+  questionId         String            @unique
+  question           InterviewQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  transcript         String
+  durationSec        Int?
+  technicalScore     Int?
+  communicationScore Int?
+  confidenceScore    Int?
+  feedback           String?
+  createdAt          DateTime          @default(now())
+}
+
+// ---------- Proctoring ----------
+
+model IntegrityLog {
+  id            String        @id @default(cuid())
+  applicationId String
+  application   Application   @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  stage         Stage
+  type          ViolationType
+  detail        String?
+  occurredAt    DateTime      @default(now())
+}
+
+// ---------- Stage 5: Final report ----------
+
+model FinalReport {
+  id             String         @id @default(cuid())
+  applicationId  String         @unique
+  application    Application    @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  resumeScore    Int?
+  aptitudeScore  Int?
+  gdScore        Int?
+  interviewScore Int?
+  integrityScore Int?
+  overallScore   Int
+  recommendation Recommendation
+  strengths      String[]
+  weaknesses     String[]
+  summary        String
+  generatedAt    DateTime       @default(now())
+}
+
+// New feature: personal feedback report for every candidate
+model CandidateFeedback {
+  id              String      @id @default(cuid())
+  applicationId   String      @unique
+  application     Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  headline        String
+  whatWentWell    String[]
+  areasToImprove  String[]
+  learningActions String[]
+  isReleased      Boolean     @default(false)
+  createdAt       DateTime    @default(now())
+}
+
+// ---------- New feature: scheduling and notifications ----------
+
+model ScheduledEvent {
+  id            String       @id @default(cuid())
+  type          EventType
+  jobId         String
+  job           Job          @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  applicationId String?
+  application   Application? @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  title         String
+  startsAt      DateTime
+  endsAt        DateTime
+  joinPath      String?
+  createdAt     DateTime     @default(now())
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  link      String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model EmailLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  toEmail   String
+  subject   String
+  status    String   // SENT or FAILED
+  error     String?
+  createdAt DateTime @default(now())
+}
