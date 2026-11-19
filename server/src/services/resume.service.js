@@ -62,10 +62,18 @@ async function extractText(buffer, mimeType) {
     } else {
       throw new HttpError(400, 'Only PDF and DOCX files are supported.');
     }
-  } catch (err) {
+ } catch (err) {
     if (err instanceof HttpError) throw err;
+
+    console.error('Resume extraction failed:', {
+        name: err?.name,
+        message: err?.message,
+        mimeType,
+        fileSize: buffer?.length,
+    });
+
     throw new HttpError(400, 'This file could not be read. Please upload a text-based PDF or DOCX.');
-  }
+}
   text = text.replace(/\r/g, '').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
   if (text.length < 80) {
     throw new HttpError(400, 'Very little text was found. Scanned images cannot be read — please upload a text-based resume.');
