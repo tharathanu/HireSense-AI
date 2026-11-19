@@ -13,7 +13,7 @@ import { LogoMark } from '../../components/Logo';
 import { Loading, ErrorAlert } from '../../components/ui';
 import { formatClock, formatDateTime } from '../../utils/format';
 
-const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const SOCKET_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:5000' : window.location.origin);
 const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }];
 if (import.meta.env.VITE_TURN_URL) {
   ICE_SERVERS.push({

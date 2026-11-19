@@ -1,7 +1,7 @@
 # Dependencies
 node_modules/
 
-# Environment secrets - never commit these
+# Environment secrets
 .env
 .env.local
 .env.*.local
@@ -13,9 +13,13 @@ coverage/
 
 # Uploaded files
 server/uploads/
+backend/uploads/*
+!backend/uploads/.gitkeep
 
-# Logs and OS files
+# Logs and system files
 *.log
 .DS_Store
-Thumbs.db
-.vscode/
+
+# Old project folders
+/backend/
+/frontend/
