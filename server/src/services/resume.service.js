@@ -11,7 +11,18 @@ const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.doc
 // Mozilla pdf.js (ES module) loaded once, on first use
 let pdfjsPromise = null;
 function loadPdfjs() {
-  if (!pdfjsPromise) pdfjsPromise = import('pdfjs-dist/legacy/build/pdf.mjs');
+  if (!pdfjsPromise) {
+    pdfjsPromise = (async () => {
+      const [pdfjs, worker] = await Promise.all([
+        import('pdfjs-dist/legacy/build/pdf.mjs'),
+        // Literal path so Vercel's file tracer bundles the worker.
+        import('pdfjs-dist/legacy/build/pdf.worker.mjs'),
+      ]);
+      // pdf.js checks this global before trying its own dynamic import.
+      globalThis.pdfjsWorker = worker;
+      return pdfjs;
+    })();
+  }
   return pdfjsPromise;
 }
 
